@@ -229,6 +229,9 @@ const App = {
         this.els.downloadBtn.addEventListener('click', () => this.download());
         this.els.clearBtn.addEventListener('click', () => this.clear());
         
+        // Import functionality - create import button
+        this.createImportUI();
+        
         // Keyboard shortcuts
         document.addEventListener('keydown', (e) => {
             if (e.ctrlKey || e.metaKey) {
@@ -413,6 +416,235 @@ const App = {
     clear() {
         this.els.output.value = '';
         this.els.statsBar.innerHTML = '';
+    },
+    
+    // Import functionality
+    createImportUI() {
+        // Create import button
+        const importBtn = document.createElement('button');
+        importBtn.id = 'importBtn';
+        importBtn.className = 'btn-icon';
+        importBtn.title = 'Import data (JSON/CSV)';
+        importBtn.innerHTML = '📤';
+        
+        // Insert import button after download button
+        const outputActions = document.querySelector('.output-actions');
+        if (outputActions) {
+            outputActions.insertBefore(importBtn, this.els.clearBtn);
+        }
+        
+        importBtn.addEventListener('click', () => this.showImportModal());
+    },
+    
+    showImportModal() {
+        // Create modal
+        const modal = document.createElement('div');
+        modal.className = 'import-modal';
+        modal.innerHTML = `
+            <div class="import-modal-content">
+                <h3>📤 Import Data</h3>
+                <p>Paste your previously exported JSON or CSV data:</p>
+                <textarea id="importInput" placeholder="Paste JSON array or CSV data here..."></textarea>
+                <p class="import-hint">Supports: JSON arrays, CSV files, and SQL INSERT statements</p>
+                <div class="import-actions">
+                    <button id="processImportBtn" class="btn-primary">✓ Import</button>
+                    <button id="cancelImportBtn" class="btn-secondary">✕ Cancel</button>
+                </div>
+                <div id="importPreview" class="import-preview"></div>
+            </div>
+            <div class="import-modal-backdrop"></div>
+        `;
+        
+        document.body.appendChild(modal);
+        
+        // Event listeners
+        document.getElementById('cancelImportBtn').addEventListener('click', () => {
+            modal.remove();
+        });
+        
+        document.getElementById('processImportBtn').addEventListener('click', () => {
+            this.processImport();
+        });
+        
+        document.querySelector('.import-modal-backdrop').addEventListener('click', () => {
+            modal.remove();
+        });
+        
+        // Live preview
+        document.getElementById('importInput').addEventListener('input', () => {
+            this.previewImport();
+        });
+        
+        // Focus textarea
+        document.getElementById('importInput').focus();
+    },
+    
+    previewImport() {
+        const input = document.getElementById('importInput').value.trim();
+        const preview = document.getElementById('importPreview');
+        
+        if (!input) {
+            preview.innerHTML = '';
+            preview.className = 'import-preview';
+            return;
+        }
+        
+        const result = this.parseImportData(input);
+        
+        if (result.success) {
+            preview.innerHTML = `✅ Valid ${result.format.toUpperCase()}: ${result.data.length} records found`;
+            preview.className = 'import-preview import-valid';
+        } else {
+            preview.innerHTML = `❌ ${result.error}`;
+            preview.className = 'import-preview import-error';
+        }
+    },
+    
+    parseImportData(input) {
+        // Try JSON first
+        try {
+            const data = JSON.parse(input);
+            if (Array.isArray(data)) {
+                return { success: true, format: 'json', data };
+            }
+            if (typeof data === 'object') {
+                return { success: true, format: 'json', data: [data] };
+            }
+            return { success: false, error: 'JSON must be an array or object' };
+        } catch (e) {
+            // Not valid JSON
+        }
+        
+        // Try CSV
+        const lines = input.split('\n').filter(l => l.trim());
+        if (lines.length >= 2 && lines[0].includes(',')) {
+            const headers = lines[0].split(',').map(h => h.trim().replace(/^["']|["']$/g, ''));
+            const data = [];
+            
+            for (let i = 1; i < lines.length; i++) {
+                const values = this.parseCSVLine(lines[i]);
+                const row = {};
+                headers.forEach((h, idx) => {
+                    row[h] = values[idx] !== undefined ? values[idx] : null;
+                });
+                data.push(row);
+            }
+            
+            if (data.length > 0) {
+                return { success: true, format: 'csv', data };
+            }
+        }
+        
+        // Try SQL INSERT statements
+        const sqlMatches = input.match(/INSERT INTO\s+\w+\s*\([^)]+\)\s*VALUES\s*\([^)]+\)/gi);
+        if (sqlMatches) {
+            const data = [];
+            sqlMatches.forEach(match => {
+                const valuesMatch = match.match(/VALUES\s*\(([^)]+)\)/i);
+                if (valuesMatch) {
+                    const values = valuesMatch[1].split(',').map(v => {
+                        v = v.trim();
+                        if ((v.startsWith("'") && v.endsWith("'")) || 
+                            (v.startsWith('"') && v.endsWith('"'))) {
+                            return v.slice(1, -1);
+                        }
+                        return isNaN(v) ? v : Number(v);
+                    });
+                    data.push({ imported: values });
+                }
+            });
+            
+            if (data.length > 0) {
+                return { success: true, format: 'sql', data };
+            }
+        }
+        
+        return { success: false, error: 'Unable to parse data. Please check format.' };
+    },
+    
+    parseCSVLine(line) {
+        const values = [];
+        let current = '';
+        let inQuotes = false;
+        
+        for (let i = 0; i < line.length; i++) {
+            const char = line[i];
+            
+            if (char === '"') {
+                if (inQuotes && line[i + 1] === '"') {
+                    current += '"';
+                    i++;
+                } else {
+                    inQuotes = !inQuotes;
+                }
+            } else if (char === ',' && !inQuotes) {
+                values.push(current.trim());
+                current = '';
+            } else {
+                current += char;
+            }
+        }
+        values.push(current.trim());
+        
+        return values.map(v => v.replace(/^["']|["']$/g, ''));
+    },
+    
+    processImport() {
+        const input = document.getElementById('importInput').value.trim();
+        
+        if (!input) {
+            this.showToast('Please paste data to import');
+            return;
+        }
+        
+        const result = this.parseImportData(input);
+        
+        if (!result.success) {
+            this.showToast(result.error);
+            return;
+        }
+        
+        // Format and display imported data
+        let output = '';
+        switch (this.els.format.value) {
+            case 'json':
+                output = JSON.stringify(result.data, null, 2);
+                break;
+            case 'csv':
+                output = this.toCSV(result.data);
+                break;
+            case 'sql':
+                output = this.toSQLFromImport(result.data);
+                break;
+        }
+        
+        this.els.output.value = output;
+        this.updateStats(output);
+        
+        // Close modal
+        document.querySelector('.import-modal').remove();
+        
+        // Show success message
+        this.showToast(`Imported ${result.data.length} records from ${result.format.toUpperCase()}!`);
+        
+        // Add to history
+        this.addToHistory('import', result.data.length, this.els.format.value);
+    },
+    
+    toSQLFromImport(data) {
+        if (data.length === 0) return '';
+        const tableName = 'imported_data';
+        const columns = Object.keys(data[0]);
+        
+        return data.map(item => {
+            const values = columns.map(col => {
+                const val = item[col];
+                if (typeof val === 'string') return `'${val.replace(/'/g, "''")}'`;
+                if (typeof val === 'object') return `'${JSON.stringify(val)}'`;
+                return val === null ? 'NULL' : val;
+            });
+            return `INSERT INTO ${tableName} (${columns.join(', ')}) VALUES (${values.join(', ')});`;
+        }).join('\n');
     },
     
     addToHistory(type, count, format) {

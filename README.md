@@ -21,6 +21,11 @@ Generate realistic fake data for testing and development. No dependencies, 100% 
 - **CSV** - Comma-separated values for spreadsheets
 - **SQL** - INSERT statements for database import
 
+### 📤 Import Formats
+- **JSON** - Import previously exported JSON data
+- **CSV** - Import CSV files back into the app
+- **SQL** - Import SQL INSERT statements
+
 ### 🎨 Interface
 - Modern dark theme with light mode toggle
 - 6 data type categories
@@ -82,6 +87,12 @@ id,name,industry,catchPhrase,website,email,phone,founded,employees,revenue
 MIT License - feel free to use for any project!
 
 ## 🐛 Changelog
+
+### v2.1 (2026-06-15)
+- 📤 Added Import functionality - import previously exported JSON, CSV, or SQL data
+- 🔄 Convert between export formats by importing and re-exporting
+- 🔍 Live validation preview when pasting import data
+- ✨ Improved UI with import button in output actions
 
 ### v2.0 (2026-06-12)
 - ✨ Completely rebuilt as a real fake data generator

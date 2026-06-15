@@ -618,3 +618,162 @@ body.offline .theme-toggle {
 body:not(.offline) .offline-badge {
     display: none;
 }
+
+/* =============================================
+   IMPORT MODAL - Added by auto-builder
+   ============================================= */
+
+.import-modal {
+    position: fixed;
+    inset: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 10001;
+    padding: 1rem;
+}
+
+.import-modal-backdrop {
+    position: fixed;
+    inset: 0;
+    background: rgba(0, 0, 0, 0.7);
+    backdrop-filter: blur(4px);
+    z-index: -1;
+    animation: fadeIn 0.2s ease;
+}
+
+@keyframes fadeIn {
+    from { opacity: 0; }
+    to { opacity: 1; }
+}
+
+.import-modal-content {
+    background: var(--bg-card);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    padding: 1.5rem;
+    width: 100%;
+    max-width: 500px;
+    max-height: 80vh;
+    overflow-y: auto;
+    animation: slideUp 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+@keyframes slideUp {
+    from {
+        transform: translateY(20px);
+        opacity: 0;
+    }
+    to {
+        transform: translateY(0);
+        opacity: 1;
+    }
+}
+
+.import-modal-content h3 {
+    margin: 0 0 1rem 0;
+    color: var(--text);
+    font-size: 1.25rem;
+}
+
+.import-modal-content p {
+    color: var(--text-muted);
+    margin-bottom: 1rem;
+    font-size: 0.95rem;
+}
+
+.import-modal-content textarea {
+    width: 100%;
+    min-height: 150px;
+    padding: 0.875rem;
+    border: 1px solid var(--border);
+    border-radius: var(--radius-sm);
+    background: var(--bg);
+    color: var(--text);
+    font-family: 'Fira Code', 'Consolas', monospace;
+    font-size: 0.85rem;
+    resize: vertical;
+    outline: none;
+    margin-bottom: 0.5rem;
+}
+
+.import-modal-content textarea:focus {
+    border-color: var(--primary);
+}
+
+.import-hint {
+    font-size: 0.8rem;
+    color: var(--text-dim) !important;
+    margin-bottom: 1rem;
+}
+
+.import-actions {
+    display: flex;
+    gap: 0.75rem;
+    margin-bottom: 0.75rem;
+}
+
+.import-actions .btn-primary {
+    flex: 1;
+    margin: 0;
+    padding: 0.75rem 1rem;
+    font-size: 0.95rem;
+}
+
+.btn-secondary {
+    flex: 1;
+    padding: 0.75rem 1rem;
+    background: var(--bg-hover);
+    color: var(--text);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-sm);
+    cursor: pointer;
+    font-size: 0.95rem;
+    transition: var(--transition);
+}
+
+.btn-secondary:hover {
+    background: var(--border);
+}
+
+.import-preview {
+    padding: 0.75rem;
+    border-radius: var(--radius-sm);
+    font-size: 0.9rem;
+    min-height: 40px;
+    display: flex;
+    align-items: center;
+}
+
+.import-preview:empty {
+    display: none;
+}
+
+.import-preview.import-valid {
+    background: rgba(34, 197, 94, 0.1);
+    color: var(--success);
+    border: 1px solid rgba(34, 197, 94, 0.3);
+}
+
+.import-preview.import-error {
+    background: rgba(239, 68, 68, 0.1);
+    color: var(--error);
+    border: 1px solid rgba(239, 68, 68, 0.3);
+}
+
+/* Light mode adjustments */
+body:not(.dark-mode) .import-modal-content {
+    background: white;
+}
+
+body:not(.dark-mode) .import-modal-content textarea {
+    background: #f8f9fa;
+}
+
+body:not(.dark-mode) .btn-secondary {
+    background: #f1f3f5;
+}
+
+body:not(.dark-mode) .btn-secondary:hover {
+    background: #e9ecef;
+}
