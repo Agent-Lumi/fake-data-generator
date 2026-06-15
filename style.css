@@ -526,3 +526,95 @@ body:not(.dark-mode) .stats-bar {
 .animate-pulse {
     animation: pulse 2s ease-in-out infinite;
 }
+
+/* =============================================
+   OFFLINE MODE - Added by auto-builder
+   ============================================= */
+
+/* Offline Indicator Banner */
+.offline-indicator {
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    background: linear-gradient(90deg, #f59e0b, #d97706);
+    color: #1a1a2e;
+    padding: 12px 20px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 12px;
+    font-weight: 600;
+    font-size: 14px;
+    z-index: 10000;
+    box-shadow: 0 4px 12px rgba(245, 158, 11, 0.4);
+    animation: slideDown 0.4s cubic-bezier(0.16, 1, 0.3, 1);
+    letter-spacing: 0.5px;
+}
+
+@keyframes slideDown {
+    from {
+        transform: translateY(-100%);
+        opacity: 0;
+    }
+    to {
+        transform: translateY(0);
+        opacity: 1;
+    }
+}
+
+.offline-icon {
+    font-size: 20px;
+    animation: pulse 2s infinite;
+}
+
+@keyframes pulse {
+    0%, 100% { opacity: 1; transform: scale(1); }
+    50% { opacity: 0.7; transform: scale(1.1); }
+}
+
+.offline-text {
+    text-shadow: none;
+}
+
+/* Adjust container when offline indicator is visible */
+body.offline .container {
+    padding-top: 70px;
+}
+
+body.offline .theme-toggle {
+    top: 60px;
+}
+
+/* Offline badge in footer */
+.offline-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 4px 12px;
+    background: rgba(245, 158, 11, 0.2);
+    border: 1px solid rgba(245, 158, 11, 0.3);
+    border-radius: 20px;
+    font-size: 12px;
+    color: #fbbf24;
+    margin-left: 10px;
+}
+
+.offline-badge::before {
+    content: '';
+    width: 8px;
+    height: 8px;
+    background: #f59e0b;
+    border-radius: 50%;
+    animation: blink 1.5s infinite;
+}
+
+@keyframes blink {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.4; }
+}
+
+/* Hide offline badge when online */
+body:not(.offline) .offline-badge {
+    display: none;
+}

@@ -15,6 +15,12 @@
         <span class="theme-icon">🌙</span>
     </div>
     
+    <!-- Offline Indicator -->
+    <div id="offlineIndicator" class="offline-indicator" style="display: none;">
+        <span class="offline-icon">📡</span>
+        <span class="offline-text">You're offline. App is working in offline mode.</span>
+    </div>
+    
     <div class="container">
         <header>
             <div class="logo">🎲</div>
@@ -79,48 +85,64 @@
     <div id="toast" class="toast"></div>
     
     <script src="app.js"></script>
-</body>
-</html><script>
-// Undo/Redo history
-const history = { past: [], future: [] };
-const saveState = () => {
-    const state = document.querySelector('textarea, input')?.value;
-    if (state) history.past.push(state);
-};
-document.addEventListener('keydown', (e) => {
-    if ((e.ctrlKey || e.metaKey) && e.key === 'z') {
-        e.preventDefault();
-        if (e.shiftKey && history.future.length) {
-            // Redo
-            const state = history.future.pop();
-            history.past.push(document.querySelector('textarea, input')?.value);
-            if (document.querySelector('textarea, input')) document.querySelector('textarea, input').value = state;
-        } else if (history.past.length) {
-            // Undo
-            const state = history.past.pop();
-            history.future.push(document.querySelector('textarea, input')?.value);
-            if (document.querySelector('textarea, input')) document.querySelector('textarea, input').value = state;
+    
+    <!-- Offline Mode Script -->
+    <script>
+    // Offline indicator functionality
+    (function() {
+        const offlineIndicator = document.getElementById('offlineIndicator');
+        
+        function updateOnlineStatus() {
+            if (navigator.onLine) {
+                offlineIndicator.style.display = 'none';
+                document.body.classList.remove('offline');
+            } else {
+                offlineIndicator.style.display = 'flex';
+                document.body.classList.add('offline');
+            }
         }
+        
+        // Initial check
+        updateOnlineStatus();
+        
+        // Listen for online/offline events
+        window.addEventListener('online', updateOnlineStatus);
+        window.addEventListener('offline', updateOnlineStatus);
+        
+        // Show offline status after a delay if we're offline
+        setTimeout(updateOnlineStatus, 500);
+    })();
+    
+    // Register Service Worker for offline support
+    if ('serviceWorker' in navigator) {
+        window.addEventListener('load', function() {
+            navigator.serviceWorker.register('sw.js')
+                .then(function(registration) {
+                    console.log('[SW] Service Worker registered:', registration.scope);
+                    
+                    // Check for updates
+                    registration.addEventListener('updatefound', function() {
+                        const newWorker = registration.installing;
+                        newWorker.addEventListener('statechange', function() {
+                            if (newWorker.state === 'installed' && navigator.serviceWorker.controller) {
+                                console.log('[SW] New version available');
+                                // Optional: Show update notification
+                            }
+                        });
+                    });
+                })
+                .catch(function(error) {
+                    console.error('[SW] Service Worker registration failed:', error);
+                });
+            
+            // Listen for messages from service worker
+            navigator.serviceWorker.addEventListener('message', function(event) {
+                if (event.data === 'reload') {
+                    window.location.reload();
+                }
+            });
+        });
     }
-});
-document.addEventListener('input', saveState);
-</script>
-<script>
-// Templates gallery
-const templates = [
-    { name: 'Default', apply: () => {} },
-    { name: 'Minimal', apply: () => document.body.style.fontFamily = 'system-ui, sans-serif' }
-];
-const templateSelect = document.createElement('select');
-templates.forEach(t => {
-    const opt = document.createElement('option');
-    opt.value = t.name;
-    opt.textContent = t.name;
-    templateSelect.appendChild(opt);
-});
-templateSelect.onchange = (e) => {
-    const template = templates.find(t => t.name === e.target.value);
-    if (template) template.apply();
-};
-document.querySelector('.container')?.appendChild(templateSelect);
-</script>
+    </script>
+</body>
+</html>
