@@ -174,13 +174,19 @@ const App = {
     currentType: 'person',
     history: JSON.parse(localStorage.getItem('fdg_history') || '[]'),
     maxHistory: 10,
+    undoStack: [],
+    redoStack: [],
+    maxUndoSize: 20,
+    favorites: JSON.parse(localStorage.getItem('fdg_favorites') || '[]'),
+    isBatchGenerating: false,
     
     init() {
         this.cacheElements();
         this.bindEvents();
         this.loadTheme();
         this.renderHistory();
-        this.showToast('Ready to generate fake data!');
+        this.renderFavorites();
+        this.showToast('Ready to generate fake data! (Press ? for help)');
     },
     
     cacheElements() {
@@ -201,6 +207,72 @@ const App = {
             historySection: document.getElementById('historySection'),
             toast: document.getElementById('toast')
         };
+    },
+    
+    saveState() {
+        const state = {
+            output: this.els.output.value,
+            type: this.currentType,
+            format: this.els.format.value,
+            quantity: this.els.quantity.value
+        };
+        this.undoStack.push(state);
+        if (this.undoStack.length > this.maxUndoSize) {
+            this.undoStack.shift();
+        }
+        this.redoStack = [];
+    },
+    
+    undo() {
+        if (this.undoStack.length === 0) return;
+        
+        const currentState = {
+            output: this.els.output.value,
+            type: this.currentType,
+            format: this.els.format.value,
+            quantity: this.els.quantity.value
+        };
+        this.redoStack.push(currentState);
+        
+        const prevState = this.undoStack.pop();
+        this.els.output.value = prevState.output;
+        this.currentType = prevState.type;
+        this.els.format.value = prevState.format;
+        this.els.quantity.value = prevState.quantity;
+        this.els.quantityValue.textContent = prevState.quantity;
+        
+        this.els.typeBtns.forEach(btn => {
+            btn.classList.toggle('active', btn.dataset.type === prevState.type);
+        });
+        
+        this.updateStats(prevState.output);
+        this.showToast('Undo successful');
+    },
+    
+    redo() {
+        if (this.redoStack.length === 0) return;
+        
+        const currentState = {
+            output: this.els.output.value,
+            type: this.currentType,
+            format: this.els.format.value,
+            quantity: this.els.quantity.value
+        };
+        this.undoStack.push(currentState);
+        
+        const nextState = this.redoStack.pop();
+        this.els.output.value = nextState.output;
+        this.currentType = nextState.type;
+        this.els.format.value = nextState.format;
+        this.els.quantity.value = nextState.quantity;
+        this.els.quantityValue.textContent = nextState.quantity;
+        
+        this.els.typeBtns.forEach(btn => {
+            btn.classList.toggle('active', btn.dataset.type === nextState.type);
+        });
+        
+        this.updateStats(nextState.output);
+        this.showToast('Redo successful');
     },
     
     bindEvents() {
@@ -229,11 +301,23 @@ const App = {
         this.els.downloadBtn.addEventListener('click', () => this.download());
         this.els.clearBtn.addEventListener('click', () => this.clear());
         
+        // Add favorite button handler
+        const favoriteBtn = document.getElementById('favoriteBtn');
+        if (favoriteBtn) {
+            favoriteBtn.addEventListener('click', () => this.addToFavorites());
+        }
+        
         // Import functionality - create import button
         this.createImportUI();
         
         // Keyboard shortcuts
         document.addEventListener('keydown', (e) => {
+            if (e.key === '?') {
+                e.preventDefault();
+                this.showKeyboardHelp();
+                return;
+            }
+            
             if (e.ctrlKey || e.metaKey) {
                 switch(e.key) {
                     case 'Enter':
@@ -250,9 +334,140 @@ const App = {
                         e.preventDefault();
                         this.download();
                         break;
+                    case 'z':
+                        e.preventDefault();
+                        if (e.shiftKey) {
+                            this.redo();
+                        } else {
+                            this.undo();
+                        }
+                        break;
+                    case 'y':
+                        e.preventDefault();
+                        this.redo();
+                        break;
+                    case 'd':
+                        e.preventDefault();
+                        this.addToFavorites();
+                        break;
                 }
             }
         });
+    },
+    
+    showKeyboardHelp() {
+        const modal = document.createElement('div');
+        modal.className = 'help-modal';
+        modal.innerHTML = `
+            <div class="help-modal-content">
+                <h3>⌨️ Keyboard Shortcuts</h3>
+                <div class="shortcuts-grid">
+                    <div class="shortcut-item"><kbd>Ctrl</kbd> + <kbd>Enter</kbd> <span>Generate Data</span></div>
+                    <div class="shortcut-item"><kbd>Ctrl</kbd> + <kbd>C</kbd> <span>Copy to Clipboard</span></div>
+                    <div class="shortcut-item"><kbd>Ctrl</kbd> + <kbd>S</kbd> <span>Download File</span></div>
+                    <div class="shortcut-item"><kbd>Ctrl</kbd> + <kbd>Z</kbd> <span>Undo</span></div>
+                    <div class="shortcut-item"><kbd>Ctrl</kbd> + <kbd>Shift</kbd> + <kbd>Z</kbd> <span>Redo</span></div>
+                    <div class="shortcut-item"><kbd>Ctrl</kbd> + <kbd>Y</kbd> <span>Redo</span></div>
+                    <div class="shortcut-item"><kbd>Ctrl</kbd> + <kbd>D</kbd> <span>Add to Favorites</span></div>
+                    <div class="shortcut-item"><kbd>?</kbd> <span>Show this Help</span></div>
+                </div>
+                <button class="btn-close-help" onclick="this.closest('.help-modal').remove()">Close</button>
+            </div>
+            <div class="help-modal-backdrop"></div>
+        `;
+        
+        document.body.appendChild(modal);
+        
+        modal.querySelector('.help-modal-backdrop').addEventListener('click', () => {
+            modal.remove();
+        });
+    },
+    
+    addToFavorites() {
+        if (!this.els.output.value) {
+            this.showToast('Nothing to save! Generate data first.');
+            return;
+        }
+        
+        const favorite = {
+            id: Utils.generateUUID(),
+            name: `${this.currentType.charAt(0).toUpperCase() + this.currentType.slice(1)} Data`,
+            content: this.els.output.value,
+            type: this.currentType,
+            format: this.els.format.value,
+            timestamp: Date.now()
+        };
+        
+        // Ask for custom name
+        const customName = prompt('Save as (optional):', favorite.name);
+        if (customName !== null) {
+            favorite.name = customName || favorite.name;
+            this.favorites.push(favorite);
+            localStorage.setItem('fdg_favorites', JSON.stringify(this.favorites));
+            this.renderFavorites();
+            this.showToast('Added to favorites! 💚');
+        }
+    },
+    
+    removeFavorite(id) {
+        this.favorites = this.favorites.filter(f => f.id !== id);
+        localStorage.setItem('fdg_favorites', JSON.stringify(this.favorites));
+        this.renderFavorites();
+        this.showToast('Removed from favorites');
+    },
+    
+    loadFavorite(id) {
+        const favorite = this.favorites.find(f => f.id === id);
+        if (!favorite) return;
+        
+        this.saveState();
+        this.els.output.value = favorite.content;
+        this.currentType = favorite.type;
+        this.els.format.value = favorite.format;
+        
+        this.els.typeBtns.forEach(btn => {
+            btn.classList.toggle('active', btn.dataset.type === favorite.type);
+        });
+        
+        this.updateStats(favorite.content);
+        this.showToast(`Loaded: ${favorite.name}`);
+    },
+    
+    renderFavorites() {
+        let section = document.getElementById('favoritesSection');
+        if (!section) {
+            section = document.createElement('div');
+            section.id = 'favoritesSection';
+            section.className = 'favorites-section';
+            section.innerHTML = '<h3>💚 Favorites</h3><div class="favorites-list" id="favoritesList"></div>';
+            this.els.historySection.after(section);
+        }
+        
+        const list = document.getElementById('favoritesList');
+        if (this.favorites.length === 0) {
+            section.style.display = 'none';
+            return;
+        }
+        
+        section.style.display = 'block';
+        list.innerHTML = this.favorites.map(f => {
+            const date = new Date(f.timestamp);
+            const timeStr = date.toLocaleDateString();
+            const typeEmojis = {
+                person: '👤', company: '🏢', address: '📍', internet: '🌐', commerce: '🛒', lorem: '📝'
+            };
+            
+            return `
+                <div class="favorite-item">
+                    <div class="favorite-info" onclick="App.loadFavorite('${f.id}')">
+                        <span class="favorite-type">${typeEmojis[f.type] || '📄'}</span>
+                        <span class="favorite-name">${f.name}</span>
+                        <span class="favorite-meta">${f.format.toUpperCase()} • ${timeStr}</span>
+                    </div>
+                    <button class="btn-favorite-delete" onclick="App.removeFavorite('${f.id}')" title="Remove">🗑️</button>
+                </div>
+            `;
+        }).join('');
     },
     
     loadTheme() {
@@ -272,73 +487,211 @@ const App = {
     },
     
     generate() {
+        // Save state before generating
+        this.saveState();
+        
         const count = parseInt(this.els.quantity.value);
         const format = this.els.format.value;
         const generator = Generators[this.currentType];
         
+        // Show progress for large batches
+        if (count > 20) {
+            this.showProgress(`Generating ${count} records...`, 0);
+        }
+        
         const data = [];
-        for (let i = 0; i < count; i++) {
-            let item = generator();
+        const batchSize = 100; // Process in chunks for large datasets
+        
+        const generateBatch = (startIdx) => {
+            const endIdx = Math.min(startIdx + batchSize, count);
             
-            // Post-process based on type
-            switch(this.currentType) {
-                case 'person':
-                    const emailDomain = Utils.randomItem(DataPools.domains);
-                    item.email = `${item.firstName.toLowerCase()}.${item.lastName.toLowerCase()}@${emailDomain}`;
-                    item.avatar = `https://api.dicebear.com/7.x/avataaars/svg?seed=${item.id}`;
-                    break;
-                    
-                case 'company':
-                    const cleanName = item.name.toLowerCase().replace(/[^a-z0-9]/g, '');
-                    item.website = `https://www.${cleanName}.com`;
-                    item.email = `contact@${cleanName}.com`;
-                    break;
-                    
-                case 'internet':
-                    item.username = `user_${Math.random().toString(36).substring(2, 8)}`;
-                    item.ipv6 = Array.from({length: 8}, () => 
-                        Math.floor(Math.random() * 65536).toString(16).padStart(4, '0')
-                    ).join(':');
-                    item.url = `https://example.com/${Math.random().toString(36).substring(2, 10)}`;
-                    break;
-                    
-                case 'lorem':
-                    item.words = Array.from({length: Utils.randomInt(5, 20)}, () => 
-                        Utils.randomItem(loremWords)
-                    ).join(' ');
-                    item.sentences = Array.from({length: Utils.randomInt(3, 8)}, () => 
-                        Array.from({length: Utils.randomInt(5, 15)}, () => 
+            for (let i = startIdx; i < endIdx; i++) {
+                let item = generator();
+                
+                // Post-process based on type
+                switch(this.currentType) {
+                    case 'person':
+                        const emailDomain = Utils.randomItem(DataPools.domains);
+                        item.email = `${item.firstName.toLowerCase()}.${item.lastName.toLowerCase()}@${emailDomain}`;
+                        item.avatar = `https://api.dicebear.com/7.x/avataaars/svg?seed=${item.id}`;
+                        break;
+                        
+                    case 'company':
+                        const cleanName = item.name.toLowerCase().replace(/[^a-z0-9]/g, '');
+                        item.website = `https://www.${cleanName}.com`;
+                        item.email = `contact@${cleanName}.com`;
+                        break;
+                        
+                    case 'internet':
+                        item.username = `user_${Math.random().toString(36).substring(2, 8)}`;
+                        item.ipv6 = Array.from({length: 8}, () => 
+                            Math.floor(Math.random() * 65536).toString(16).padStart(4, '0')
+                        ).join(':');
+                        item.url = `https://example.com/${Math.random().toString(36).substring(2, 10)}`;
+                        break;
+                        
+                    case 'lorem':
+                        item.words = Array.from({length: Utils.randomInt(5, 20)}, () => 
                             Utils.randomItem(loremWords)
-                        ).join(' ') + '.'
-                    ).join(' ');
-                    item.paragraphs = Array.from({length: Utils.randomInt(1, 4)}, () => 
-                        Array.from({length: Utils.randomInt(3, 6)}, () => 
+                        ).join(' ');
+                        item.sentences = Array.from({length: Utils.randomInt(3, 8)}, () => 
                             Array.from({length: Utils.randomInt(5, 15)}, () => 
                                 Utils.randomItem(loremWords)
                             ).join(' ') + '.'
-                        ).join(' ')
-                    ).join('\n\n');
+                        ).join(' ');
+                        item.paragraphs = Array.from({length: Utils.randomInt(1, 4)}, () => 
+                            Array.from({length: Utils.randomInt(3, 6)}, () => 
+                                Array.from({length: Utils.randomInt(5, 15)}, () => 
+                                    Utils.randomItem(loremWords)
+                                ).join(' ') + '.'
+                            ).join(' ')
+                        ).join('\n\n');
+                        break;
+                }
+                
+                data.push(item);
+            }
+            
+            // Update progress
+            if (count > 20) {
+                const progress = Math.round((endIdx / count) * 100);
+                this.updateProgress(progress);
+            }
+            
+            // Continue with next batch or finish
+            if (endIdx < count) {
+                setTimeout(() => generateBatch(endIdx), 0);
+            } else {
+                finishGeneration();
+            }
+        };
+        
+        const finishGeneration = () => {
+            // Hide progress
+            this.hideProgress();
+            
+            // Format output
+            let output = '';
+            switch(format) {
+                case 'json':
+                    output = JSON.stringify(data, null, 2);
+                    break;
+                case 'csv':
+                    output = this.toCSV(data);
+                    break;
+                case 'sql':
+                    output = this.toSQL(data);
                     break;
             }
             
-            data.push(item);
+            this.els.output.value = output;
+            this.updateStats(output);
+            this.addToHistory(this.currentType, count, format);
+            this.showToast(`Generated ${count} ${this.currentType} records!`);
+            
+            // Validate data and show preview
+            this.validateAndPreview(data);
+        };
+        
+        // Start generation
+        generateBatch(0);
+    },
+    
+    showProgress(message, percent) {
+        let progressEl = document.getElementById('generationProgress');
+        if (!progressEl) {
+            progressEl = document.createElement('div');
+            progressEl.id = 'generationProgress';
+            progressEl.className = 'progress-overlay';
+            progressEl.innerHTML = `
+                <div class="progress-content">
+                    <div class="progress-spinner"></div>
+                    <div class="progress-text">${message}</div>
+                    <div class="progress-bar"><div class="progress-fill"></div></div>
+                </div>
+            `;
+            document.body.appendChild(progressEl);
+        }
+        progressEl.style.display = 'flex';
+        this.updateProgress(percent);
+    },
+    
+    updateProgress(percent) {
+        const progressEl = document.getElementById('generationProgress');
+        if (progressEl) {
+            const fill = progressEl.querySelector('.progress-fill');
+            if (fill) {
+                fill.style.width = `${percent}%`;
+            }
+            const text = progressEl.querySelector('.progress-text');
+            if (text) {
+                text.textContent = `Generating... ${percent}%`;
+            }
+        }
+    },
+    
+    hideProgress() {
+        const progressEl = document.getElementById('generationProgress');
+        if (progressEl) {
+            progressEl.style.display = 'none';
+        }
+    },
+    
+    validateAndPreview(data) {
+        const validation = this.validateData(data);
+        
+        // Show validation summary in stats bar
+        const statsBar = document.getElementById('statsBar');
+        if (statsBar && validation.isValid) {
+            const previewDiv = document.createElement('div');
+            previewDiv.className = 'validation-preview';
+            previewDiv.innerHTML = `
+                <span class="validation-badge valid">✅ Valid ${validation.format.toUpperCase()}</span>
+                <span class="validation-count">${data.length} records</span>
+            `;
+            
+            // Remove existing preview
+            const existing = statsBar.querySelector('.validation-preview');
+            if (existing) existing.remove();
+            
+            statsBar.appendChild(previewDiv);
+            
+            // Auto-hide after 3 seconds
+            setTimeout(() => {
+                if (previewDiv.parentNode) {
+                    previewDiv.remove();
+                }
+            }, 3000);
+        }
+    },
+    
+    validateData(data) {
+        if (!Array.isArray(data) || data.length === 0) {
+            return { isValid: false, error: 'No data generated' };
         }
         
-        // Format output
-        let output = '';
-        switch(format) {
-            case 'json':
-                output = JSON.stringify(data, null, 2);
-                break;
-            case 'csv':
-                output = this.toCSV(data);
-                break;
-            case 'sql':
-                output = this.toSQL(data);
-                break;
+        // Check each record has required fields
+        const sampleRecord = data[0];
+        const requiredFields = Object.keys(sampleRecord);
+        
+        const invalidRecords = data.filter(record => {
+            return requiredFields.some(field => !(field in record));
+        });
+        
+        if (invalidRecords.length > 0) {
+            return { 
+                isValid: false, 
+                error: `${invalidRecords.length} records missing fields`,
+                format: 'unknown'
+            };
         }
         
-        this.els.output.value = output;
+        return { 
+            isValid: true, 
+            format: this.els.format.value,
+            recordCount: data.length
+        };
+    },
         this.updateStats(output);
         this.addToHistory(this.currentType, count, format);
         this.showToast(`Generated ${count} ${this.currentType} records!`);
