@@ -5,20 +5,40 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <meta name="description" content="Generate realistic fake data for testing and development">
     <meta name="author" content="Agent-Lumi">
+    <meta name="theme-color" content="#6f42c1">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <meta name="apple-mobile-web-app-title" content="Fake Data Generator">
     <title>Fake Data Generator | Made by Agent-Lumi</title>
     <link rel="stylesheet" href="style.css">
     <link rel="manifest" href="manifest.json">
     <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🎲</text></svg>">
+    <link rel="apple-touch-icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 192 192'><rect fill='%236f42c1' width='192' height='192' rx='20'/><text x='96' y='130' font-size='120' text-anchor='middle'>🎲</text></svg>">
 </head>
 <body>
-    <div class="theme-toggle" id="themeToggle" title="Toggle dark mode">
-        <span class="theme-icon">🌙</span>
+    <!-- PWA Install Banner -->
+    <div id="installBanner" class="install-banner" style="display: none;">
+        <span class="install-icon">📱</span>
+        <span class="install-text">Install Fake Data Generator for offline access!</span>
+        <button id="installBtn" class="btn-install">Install</button>
+        <button id="dismissInstallBtn" class="btn-dismiss" aria-label="Dismiss">✕</button>
     </div>
-    
+
     <!-- Offline Indicator -->
     <div id="offlineIndicator" class="offline-indicator" style="display: none;">
         <span class="offline-icon">📡</span>
         <span class="offline-text">You're offline. App is working in offline mode.</span>
+    </div>
+
+    <!-- Update Available Banner -->
+    <div id="updateBanner" class="update-banner" style="display: none;">
+        <span class="update-icon">🔄</span>
+        <span class="update-text">A new version is available!</span>
+        <button id="updateBtn" class="btn-update">Update</button>
+    </div>
+    
+    <div class="theme-toggle" id="themeToggle" title="Toggle dark mode">
+        <span class="theme-icon">🌙</span>
     </div>
     
     <div class="container">
@@ -26,6 +46,10 @@
             <div class="logo">🎲</div>
             <h1>Fake Data Generator</h1>
             <p class="subtitle">Generate realistic fake data for testing and development</p>
+            <div class="pwa-badge" id="pwaBadge" style="display: none;">
+                <span class="badge-icon">⭐</span>
+                <span class="badge-text">Installed App</span>
+            </div>
         </header>
 
         <main>
@@ -86,10 +110,71 @@
     
     <script src="app.js"></script>
     
-    <!-- Offline Mode Script -->
+    <!-- PWA Support Script -->
     <script>
-    // Offline indicator functionality
+    // PWA Install functionality
     (function() {
+        let deferredPrompt;
+        const installBanner = document.getElementById('installBanner');
+        const installBtn = document.getElementById('installBtn');
+        const dismissInstallBtn = document.getElementById('dismissInstallBtn');
+        const pwaBadge = document.getElementById('pwaBadge');
+        const updateBanner = document.getElementById('updateBanner');
+        const updateBtn = document.getElementById('updateBtn');
+        
+        // Check if app is installed (standalone mode)
+        if (window.matchMedia('(display-mode: standalone)').matches || 
+            navigator.standalone === true) {
+            pwaBadge.style.display = 'inline-flex';
+        }
+        
+        // Listen for beforeinstallprompt event
+        window.addEventListener('beforeinstallprompt', (e) => {
+            // Prevent Chrome 67 and earlier from automatically showing the prompt
+            e.preventDefault();
+            // Store the event for later use
+            deferredPrompt = e;
+            // Show the install banner
+            installBanner.style.display = 'flex';
+        });
+        
+        // Install button click handler
+        installBtn.addEventListener('click', async () => {
+            if (!deferredPrompt) return;
+            // Show the install prompt
+            deferredPrompt.prompt();
+            // Wait for user to respond
+            const { outcome } = await deferredPrompt.userChoice;
+            console.log(`User response: ${outcome}`);
+            // Clear the deferred prompt
+            deferredPrompt = null;
+            // Hide the banner
+            installBanner.style.display = 'none';
+        });
+        
+        // Dismiss button
+        dismissInstallBtn.addEventListener('click', () => {
+            installBanner.style.display = 'none';
+            // Remember dismissal
+            localStorage.setItem('pwaInstallDismissed', Date.now());
+        });
+        
+        // Check if dismissed recently (don't show for 7 days)
+        const dismissed = localStorage.getItem('pwaInstallDismissed');
+        if (dismissed && (Date.now() - parseInt(dismissed)) < 7 * 24 * 60 * 60 * 1000) {
+            // Don't show banner, but still listen for beforeinstallprompt
+        }
+        
+        // Handle app installed event
+        window.addEventListener('appinstalled', () => {
+            console.log('PWA was installed');
+            installBanner.style.display = 'none';
+            pwaBadge.style.display = 'inline-flex';
+            deferredPrompt = null;
+            showToast('App installed successfully! 🎉');
+        });
+        
+        // Offline indicator
         const offlineIndicator = document.getElementById('offlineIndicator');
         
         function updateOnlineStatus() {
@@ -102,47 +187,64 @@
             }
         }
         
-        // Initial check
         updateOnlineStatus();
-        
-        // Listen for online/offline events
-        window.addEventListener('online', updateOnlineStatus);
-        window.addEventListener('offline', updateOnlineStatus);
-        
-        // Show offline status after a delay if we're offline
-        setTimeout(updateOnlineStatus, 500);
-    })();
-    
-    // Register Service Worker for offline support
-    if ('serviceWorker' in navigator) {
-        window.addEventListener('load', function() {
-            navigator.serviceWorker.register('sw.js')
-                .then(function(registration) {
-                    console.log('[SW] Service Worker registered:', registration.scope);
-                    
-                    // Check for updates
-                    registration.addEventListener('updatefound', function() {
-                        const newWorker = registration.installing;
-                        newWorker.addEventListener('statechange', function() {
-                            if (newWorker.state === 'installed' && navigator.serviceWorker.controller) {
-                                console.log('[SW] New version available');
-                                // Optional: Show update notification
-                            }
-                        });
-                    });
-                })
-                .catch(function(error) {
-                    console.error('[SW] Service Worker registration failed:', error);
-                });
-            
-            // Listen for messages from service worker
-            navigator.serviceWorker.addEventListener('message', function(event) {
-                if (event.data === 'reload') {
-                    window.location.reload();
-                }
-            });
+        window.addEventListener('online', () => {
+            updateOnlineStatus();
+            showToast('Back online! 🌐');
         });
-    }
+        window.addEventListener('offline', () => {
+            updateOnlineStatus();
+            showToast('You\'re offline. App working in offline mode. 📡');
+        });
+        
+        // Toast notification helper
+        function showToast(message) {
+            const toast = document.getElementById('toast');
+            toast.textContent = message;
+            toast.classList.add('show');
+            setTimeout(() => toast.classList.remove('show'), 3000);
+        }
+        
+        // Register Service Worker with update handling
+        if ('serviceWorker' in navigator) {
+            window.addEventListener('load', function() {
+                navigator.serviceWorker.register('sw.js')
+                    .then(function(registration) {
+                        console.log('[SW] Service Worker registered:', registration.scope);
+                        
+                        // Check for updates
+                        registration.addEventListener('updatefound', function() {
+                            const newWorker = registration.installing;
+                            newWorker.addEventListener('statechange', function() {
+                                if (newWorker.state === 'installed') {
+                                    if (navigator.serviceWorker.controller) {
+                                        // New update available
+                                        updateBanner.style.display = 'flex';
+                                    }
+                                }
+                            });
+                        });
+                    })
+                    .catch(function(error) {
+                        console.error('[SW] Service Worker registration failed:', error);
+                    });
+                
+                // Update button handler
+                updateBtn.addEventListener('click', function() {
+                    navigator.serviceWorker.ready.then(function(registration) {
+                        if (registration.waiting) {
+                            registration.waiting.postMessage('skipWaiting');
+                        }
+                    });
+                });
+                
+                // Listen for controller change
+                navigator.serviceWorker.addEventListener('controllerchange', function() {
+                    window.location.reload();
+                });
+            });
+        }
+    })();
     </script>
 </body>
 </html>

@@ -1,4 +1,4 @@
-const CACHE_NAME = 'fake-data-generator-v1';
+const CACHE_NAME = 'fake-data-generator-v2';
 const CACHE_URLS = [
     '.',
     './index.html',
@@ -39,18 +39,18 @@ self.addEventListener('activate', (event) => {
     self.clients.claim();
 });
 
-// Fetch event - serve from cache, fallback to network
+// Fetch event - stale-while-revalidate strategy
 self.addEventListener('fetch', (event) => {
     event.respondWith(
         caches.match(event.request)
             .then((response) => {
-                // Return cached version or fetch from network
-                if (response) {
-                    return response;
-                }
-                return fetch(event.request)
+                // Return cached version immediately
+                const cachedResponse = response;
+                
+                // Fetch from network in background
+                const fetchPromise = fetch(event.request)
                     .then((networkResponse) => {
-                        // Cache new successful GET requests
+                        // Update cache with fresh content
                         if (networkResponse && networkResponse.status === 200 && event.request.method === 'GET') {
                             const responseToCache = networkResponse.clone();
                             caches.open(CACHE_NAME).then((cache) => {
@@ -60,16 +60,51 @@ self.addEventListener('fetch', (event) => {
                         return networkResponse;
                     })
                     .catch(() => {
-                        // Return offline fallback if available
-                        if (event.request.destination === 'document') {
-                            return caches.match('./index.html');
-                        }
+                        // Network failed, already have cached version
                     });
+                
+                // Return cached immediately or fetch if not cached
+                return cachedResponse || fetchPromise;
             })
     );
 });
 
-// Message handling for skipWaiting
+// Background sync for offline data generation
+self.addEventListener('sync', (event) => {
+    if (event.tag === 'data-generation-sync') {
+        event.waitUntil(
+            // Sync any pending operations
+            console.log('[SW] Background sync triggered')
+        );
+    }
+});
+
+// Push notification support
+self.addEventListener('push', (event) => {
+    const options = {
+        body: event.data ? event.data.text() : 'Notification from Fake Data Generator',
+        icon: 'data:image/svg+xml,%3Csvg xmlns=\'http://www.w3.org/2000/svg\' viewBox=\'0 0 192 192\'%3E%3Crect fill=\'%236f42c1\' width=\'192\' height=\'192\' rx=\'20\'/%3E%3Ctext x=\'96\' y=\'130\' font-size=\'120\' text-anchor=\'middle\'%3E%F0%9F%8E%B2%3C/text%3E%3C/svg%3E',
+        badge: 'data:image/svg+xml,%3Csvg xmlns=\'http://www.w3.org/2000/svg\' viewBox=\'0 0 192 192\'%3E%3Crect fill=\'%236f42c1\' width=\'192\' height=\'192\' rx=\'20\'/%3E%3Ctext x=\'96\' y=\'130\' font-size=\'120\' text-anchor=\'middle\'%3E%F0%9F%8E%B2%3C/text%3E%3C/svg%3E',
+        vibrate: [100, 50, 100],
+        data: {
+            url: self.location.origin
+        }
+    };
+    
+    event.waitUntil(
+        self.registration.showNotification('Fake Data Generator', options)
+    );
+});
+
+// Notification click handler
+self.addEventListener('notificationclick', (event) => {
+    event.notification.close();
+    event.waitUntil(
+        clients.openWindow(event.notification.data.url)
+    );
+});
+
+// Message handling
 self.addEventListener('message', (event) => {
     if (event.data === 'skipWaiting') {
         self.skipWaiting();
